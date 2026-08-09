@@ -9,7 +9,7 @@
 > **Airflow shows you task dependencies inside a single DAG.**
 > dagscope shows you *table* dependencies — including the ones that silently cross DAG boundaries — and tells you exactly what breaks when you change something.
 
----
+![dagscope web UI](assets/web-ui.svg)
 
 ## The Problem
 
@@ -19,7 +19,11 @@ Airflow's UI models task dependencies **within** a DAG. It models nothing about 
 
 **dagscope makes it visible.**
 
----
+## Pipeline — What the Graph Looks Like
+
+![lineage pipeline](assets/pipeline.svg)
+
+Nine tables across four schema layers. Two DAGs share `public.positions_daily` as an intermediary — neither knows about the other. A genuine circular dependency is visible immediately. A "dead" table feeds 12 downstream nodes.
 
 ## Demo
 
@@ -88,8 +92,6 @@ $ dagscope impact --table raw.instrument_master
 
 `raw.instrument_master` looks unused when you scan the ingestion DAGs. dagscope proves it feeds 12 downstream nodes including the exposure report. Drop it and you break reporting.
 
----
-
 ## How It Works
 
 ```mermaid
@@ -109,8 +111,6 @@ flowchart LR
 ```
 
 Each stage is a **pure function** over the previous stage's output — independently testable and replaceable. The LLM sits at the narration layer only: it receives a pre-computed subgraph and describes it. It never determines the graph. A lineage tool that hallucinates an edge is worse than no tool.
-
----
 
 ## Cross-DAG Lineage — The Key Insight
 
@@ -132,8 +132,6 @@ graph LR
     style P stroke:#ff4060,stroke-width:2px
     style SB stroke:#ff4060,stroke-width:2px,stroke-dasharray:5
 ```
-
----
 
 ## Quickstart
 
@@ -157,8 +155,6 @@ export ANTHROPIC_API_KEY=sk-ant-...
 dagscope impact --table public.positions_daily
 ```
 
----
-
 ## CLI Reference
 
 | Command | What it does |
@@ -172,8 +168,6 @@ dagscope impact --table public.positions_daily
 
 All commands accept `--dag-dir <path>` (default: `sample_dags`) and `--no-llm` to skip AI summarization.
 
----
-
 ## Sample Pipeline
 
 Nine DAGs in a trading-and-positions domain, bundled in `sample_dags/`. Each is deliberately seeded with something for dagscope to find:
@@ -186,9 +180,7 @@ Nine DAGs in a trading-and-positions domain, bundled in `sample_dags/`. Each is 
 | 6-hop chain `raw.trades` → `risk_dashboard_ext` | Hop-distance ranking shows what's most at risk vs. what's tangentially affected |
 | Tables shared across multiple DAGs | Cross-DAG lineage invisible to Airflow's own UI |
 
----
-
-## What I Built & Learned
+## What I Built and Learned
 
 **Graph algorithms applied to a real problem.** BFS reachability (`networkx.single_source_shortest_path_length`) for hop-distance ranking. `simple_cycles` for cycle detection. The interesting part is that the meaningful graph structure only emerges when you unify task and table nodes across every DAG in the folder — neither algorithm is novel, but the graph they operate on is.
 
@@ -200,9 +192,7 @@ Nine DAGs in a trading-and-positions domain, bundled in `sample_dags/`. Each is 
 
 **Cross-DAG lineage as a graph problem.** The key insight: task→table and table→task edges from separate DAGs compose into a unified graph automatically through shared table nodes. No explicit cross-DAG wiring needed. A table node connecting two DAGs that share no code is a first-class edge.
 
-**Engineering honesty.** Confidence tagging (high/low edges), published parse success rate, explicit low-confidence warnings in the web UI, graceful API key degradation. Built a tool that's honest about what it doesn't know.
-
----
+**Engineering honesty.** Confidence tagging (high/low edges), published parse success rate, explicit low-confidence warnings in the web UI, graceful API key degradation. Built a tool that is honest about what it does not know.
 
 ## Tech Stack
 
@@ -217,8 +207,6 @@ Nine DAGs in a trading-and-positions domain, bundled in `sample_dags/`. Each is 
 | Visualization | `vis-network` | Force-directed layout, zero build step |
 | Tests | `pytest` | 33 tests — parser, graph, impact engine, LLM contract |
 
----
-
 ## Known Limitations
 
 | Limitation | Why |
@@ -228,8 +216,6 @@ Nine DAGs in a trading-and-positions domain, bundled in `sample_dags/`. Each is 
 | PythonOperator edges are best-effort | SQL inside callables found by regex, tagged `confidence: low`. Success rate printed on every run. |
 | AST parser, not DagBag | DAGs parsed without execution. Dynamic tasks may not fully resolve. DagBag integration is a planned upgrade. |
 
----
-
 ## Running Tests
 
 ```bash
@@ -238,8 +224,6 @@ pytest tests/ -v
 ```
 
 33 tests covering the DAG parser, SQL extractor, graph builder, and impact engine. The LLM layer is tested at the contract boundary only — Pydantic schema validation against mocked output.
-
----
 
 *Built by [Momin Naeem](https://mominnaeem.com) · UWaterloo Computer Engineering*
 *Motivated by real data engineering work at GTS Securities — Airflow pipelines, PostgreSQL at scale, and the downstream breaks nobody saw coming.*
