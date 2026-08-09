@@ -1,0 +1,31 @@
+# env & secrets
+.env
+*.env
+
+# virtual env
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# exports
+graph.json
+
+# project internals (not for the repo)
+CLAUDE.md
+readme-preview.html
+tasks/
+dag-lineage-design.md
+Jake_s_Resume__Claude_improved_*

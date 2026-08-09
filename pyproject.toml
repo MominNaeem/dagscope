@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dagscope"
+version = "0.1.0"
+description = "Airflow DAG lineage and change impact analysis"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "sqlglot>=23.0",
+    "networkx>=3.0",
+    "pydantic>=2.0",
+    "click>=8.0",
+    "rich>=13.0",
+    "fastapi>=0.100",
+    "uvicorn>=0.23",
+    "anthropic>=0.28",
+]
+
+[project.optional-dependencies]
+airflow = ["apache-airflow>=2.7"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0"]
+
+[project.scripts]
+dagscope = "dagscope.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dagscope*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

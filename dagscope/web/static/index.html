@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dagscope — DAG Lineage</title>
+  <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+  <style>
+    :root {
+      --bg:        #070d1a;
+      --surface:   #0f1829;
+      --surface2:  #1a2540;
+      --border:    #1e2d4a;
+      --accent:    #4f8eff;
+      --accent2:   #7c5cfc;
+      --text:      #e8edf7;
+      --muted:     #5a6a8a;
+      --success:   #22d3a0;
+      --warning:   #f5a623;
+      --danger:    #ff5c5c;
+      --task-bg:   #1a2a6c;
+      --task-bd:   #4f8eff;
+      --raw-bg:    #2d1f00;
+      --raw-bd:    #f5a623;
+      --pub-bg:    #003d2e;
+      --pub-bd:    #22d3a0;
+      --stg-bg:    #1a1f2e;
+      --stg-bd:    #4a556a;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      font-size: 13px;
+    }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 320px;
+      min-width: 320px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #sidebar-header {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(135deg, #0f1829 0%, #111e38 100%);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .logo-icon {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+    }
+
+    .logo h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.3px; }
+    .logo h1 span { color: var(--muted); font-weight: 400; }
+
+    .stat-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .stat {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      text-align: center;
+    }
+
+    .stat-value { font-size: 1.25rem; font-weight: 700; color: var(--text); }
+    .stat-label { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-top: 1px; }
+
+    /* ── Cycle alert ── */
+    #cycle-alert {
+      display: none;
+      margin: 10px 12px 0;
+      background: linear-gradient(135deg, #2d0a0a, #3d1010);
+      border: 1px solid #6b1a1a;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.78rem;
+    }
+
+    #cycle-alert .alert-title {
+      display: flex; align-items: center; gap: 6px;
+      color: #ff8080; font-weight: 600; margin-bottom: 5px;
+    }
+
+    #cycle-alert .alert-body { color: #fca5a5; line-height: 1.5; word-break: break-all; }
+
+    /* ── Main panel ── */
+    #panel {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .placeholder {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--muted);
+      text-align: center;
+      padding: 20px;
+    }
+
+    .placeholder-icon { font-size: 2rem; opacity: 0.4; }
+    .placeholder p { font-size: 0.8rem; line-height: 1.6; }
+
+    #node-info { display: none; }
+
+    .node-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .node-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+      word-break: break-all;
+      flex: 1;
+    }
+
+    .kind-badge {
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .kind-task  { background: rgba(79,142,255,0.15); color: var(--accent); border: 1px solid rgba(79,142,255,0.3); }
+    .kind-table { background: rgba(34,211,160,0.12); color: var(--success); border: 1px solid rgba(34,211,160,0.25); }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+      margin-bottom: 12px;
+      gap: 2px;
+    }
+
+    .tab {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      padding: 6px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .tab.active {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .tab:not(.active):hover { background: var(--border); color: var(--text); }
+
+    /* ── Impact tab ── */
+    .impact-hero {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .impact-number { font-size: 2rem; font-weight: 800; color: var(--warning); line-height: 1; }
+    .impact-meta { font-size: 0.75rem; color: var(--muted); }
+    .impact-meta strong { display: block; color: var(--text); font-size: 0.82rem; margin-bottom: 1px; }
+
+    .impact-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+
+    .impact-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 7px 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      transition: border-color 0.15s;
+    }
+
+    .impact-item:hover { border-color: var(--accent); }
+
+    .impact-item-name {
+      font-size: 0.77rem;
+      color: var(--text);
+      word-break: break-all;
+      flex: 1;
+    }
+
+    .hop-pill {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 0.68rem;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* ── AI tab ── */
+    #tab-ai { display: none; }
+
+    #ai-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 30px 0;
+      color: var(--muted);
+    }
+
+    .spinner {
+      width: 28px; height: 28px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #ai-loading p { font-size: 0.8rem; }
+    #ai-loading small { font-size: 0.7rem; color: var(--muted); opacity: 0.6; }
+
+    #ai-result { display: none; }
+    #ai-error  { display: none; font-size: 0.78rem; color: var(--muted); padding: 10px; }
+
+    .severity-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .severity-badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .sev-low      { background: rgba(34,211,160,0.15); color: #22d3a0; border: 1px solid rgba(34,211,160,0.3); }
+    .sev-medium   { background: rgba(245,166,35,0.15); color: #f5a623; border: 1px solid rgba(245,166,35,0.3); }
+    .sev-high     { background: rgba(255,92,92,0.15);  color: #ff7070; border: 1px solid rgba(255,92,92,0.3); }
+    .sev-critical { background: rgba(255,0,60,0.18);   color: #ff4060; border: 1px solid rgba(255,0,60,0.4); box-shadow: 0 0 12px rgba(255,0,60,0.2); }
+
+    .ai-section {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+    }
+
+    .ai-section-title {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .ai-summary-text {
+      font-size: 0.8rem;
+      color: var(--text);
+      line-height: 1.65;
+    }
+
+    .checks-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+
+    .check-item {
+      display: flex;
+      gap: 8px;
+      font-size: 0.78rem;
+      color: #c8d5f0;
+      line-height: 1.5;
+    }
+
+    .check-dot {
+      width: 5px; height: 5px;
+      background: var(--accent);
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 6px;
+    }
+
+    .uncertainty-box {
+      background: rgba(245,166,35,0.07);
+      border: 1px solid rgba(245,166,35,0.2);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.75rem;
+      color: #d4a853;
+      line-height: 1.5;
+      margin-bottom: 8px;
+    }
+
+    .uncertainty-box::before { content: "⚠ "; }
+
+    /* ── Legend ── */
+    #legend {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+    }
+
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.7rem; color: var(--muted); }
+    .legend-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .legend-box  { width: 12px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+    /* ── Graph area ── */
+    #graph-area {
+      flex: 1;
+      position: relative;
+      background: var(--bg);
+      background-image:
+        radial-gradient(circle at 20% 50%, rgba(79,142,255,0.03) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(124,92,252,0.03) 0%, transparent 50%);
+    }
+
+    #network { width: 100%; height: 100%; }
+
+    #loading-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 0.85rem;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    #graph-hint {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.7rem;
+      color: var(--muted);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    #graph-hint.visible { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<!-- ─────────── Sidebar ─────────── -->
+<aside id="sidebar">
+
+  <div id="sidebar-header">
+    <div class="logo">
+      <div class="logo-icon">◈</div>
+      <h1>dagscope <span>/ lineage</span></h1>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-value" id="s-dags">–</div><div class="stat-label">DAGs</div></div>
+      <div class="stat"><div class="stat-value" id="s-tasks">–</div><div class="stat-label">Tasks</div></div>
+      <div class="stat"><div class="stat-value" id="s-tables">–</div><div class="stat-label">Tables</div></div>
+      <div class="stat"><div class="stat-value" id="s-edges">–</div><div class="stat-label">Edges</div></div>
+    </div>
+  </div>
+
+  <div id="cycle-alert">
+    <div class="alert-title">⚠ Cycle detected</div>
+    <div class="alert-body" id="cycle-detail"></div>
+  </div>
+
+  <div id="panel">
+    <div class="placeholder" id="placeholder">
+      <div class="placeholder-icon">◈</div>
+      <p>Click any node in the graph to inspect its blast radius and get an AI-powered impact analysis.</p>
+    </div>
+
+    <div id="node-info">
+      <div class="node-header">
+        <span class="node-label" id="ni-label"></span>
+        <span class="kind-badge" id="ni-kind"></span>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="impact">Blast Radius</button>
+        <button class="tab" data-tab="ai">AI Analysis</button>
+      </div>
+
+      <!-- Impact tab -->
+      <div id="tab-impact">
+        <div class="impact-hero">
+          <div class="impact-number" id="impact-count">0</div>
+          <div class="impact-meta">
+            <strong id="impact-direction">downstream</strong>
+            nodes affected
+          </div>
+        </div>
+        <ul class="impact-list" id="impact-list"></ul>
+      </div>
+
+      <!-- AI tab -->
+      <div id="tab-ai">
+        <div id="ai-loading">
+          <div class="spinner"></div>
+          <p>Analyzing with Claude…</p>
+          <small>This may take a few seconds</small>
+        </div>
+        <div id="ai-error"></div>
+        <div id="ai-result">
+          <div class="severity-row">
+            <div class="severity-badge" id="ai-severity"></div>
+            <span style="font-size:0.72rem; color:var(--muted)">impact severity</span>
+          </div>
+          <div class="ai-section">
+            <div class="ai-section-title">Summary</div>
+            <p class="ai-summary-text" id="ai-summary"></p>
+          </div>
+          <div class="uncertainty-box" id="ai-uncertainty" style="display:none"></div>
+          <div class="ai-section">
+            <div class="ai-section-title">Recommended checks</div>
+            <ul class="checks-list" id="ai-checks"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="legend">
+    <div class="legend-item"><div class="legend-box" style="background:var(--task-bg);border:1px solid var(--task-bd)"></div> Task</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--raw-bd)"></div> Raw table</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--pub-bd)"></div> Public table</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--stg-bd)"></div> Staging</div>
+  </div>
+
+</aside>
+
+<!-- ─────────── Graph ─────────── -->
+<div id="graph-area">
+  <div id="network"></div>
+  <div id="loading-overlay">
+    <div class="spinner" style="width:36px;height:36px;border-width:3px"></div>
+    <span>Building lineage graph…</span>
+  </div>
+  <div id="graph-hint">Scroll to zoom · Drag to pan · Click to inspect</div>
+</div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────────────
+const C = {
+  task:    { bg: '#1a2a6c', border: '#4f8eff', hover: '#2a3d8a' },
+  raw:     { bg: '#2d1f00', border: '#f5a623', hover: '#3d2a00' },
+  public:  { bg: '#003d2e', border: '#22d3a0', hover: '#004d3a' },
+  staging: { bg: '#1a1f2e', border: '#4a556a', hover: '#22293a' },
+  hit:     { bg: '#3d0a24', border: '#ff4060' },
+  blast:   { bg: '#3d1f00', border: '#f5a623' },
+};
+
+function nodeColor(n) {
+  if (n.kind === 'task') return C.task;
+  const schema = n.id.split('.')[0];
+  return C[schema] || C.staging;
+}
+
+let network, allNodes, allEdges, origNode = {}, origEdge = {};
+let currentNode = null;
+let aiCache = {};
+
+// ── Boot ────────────────────────────────────────────────────────────────────
+async function boot() {
+  const [g, sum, cyc] = await Promise.all([
+    fetch('/api/graph').then(r => r.json()),
+    fetch('/api/summary').then(r => r.json()),
+    fetch('/api/cycles').then(r => r.json()),
+  ]);
+
+  // Stats
+  document.getElementById('s-dags').textContent   = sum.dag_count;
+  document.getElementById('s-tasks').textContent  = sum.task_count;
+  document.getElementById('s-tables').textContent = sum.table_count;
+  document.getElementById('s-edges').textContent  = sum.edge_count;
+
+  // Cycle alert
+  if (cyc.cycles.length > 0) {
+    const el = document.getElementById('cycle-alert');
+    el.style.display = 'block';
+    const c = cyc.cycles[0];
+    document.getElementById('cycle-detail').textContent = c.join(' → ') + ' → ' + c[0];
+  }
+
+  // Build vis datasets
+  const vNodes = g.nodes.map(n => {
+    const col = nodeColor(n);
+    return {
+      id: n.id,
+      label: n.kind === 'task' ? n.task_id : n.id.split('.')[1] || n.id,
+      title: n.id,
+      shape: n.kind === 'task' ? 'box' : 'ellipse',
+      color: { background: col.bg, border: col.border, hover: { background: col.hover, border: col.border } },
+      font: { color: '#e8edf7', size: 11, face: 'Inter, system-ui, sans-serif' },
+      borderWidth: 1.5,
+      shadow: { enabled: true, color: col.border + '33', size: 6, x: 0, y: 2 },
+      _data: n,
+    };
+  });
+
+  const vEdges = g.edges.map((e, i) => ({
+    id: i,
+    from: e.from,
+    to: e.to,
+    dashes: e.confidence === 'low',
+    color: { color: e.kind === 'task_dep' ? '#2a3650' : '#1e2d4a', opacity: 0.9 },
+    width: e.kind === 'task_dep' ? 1 : 1.5,
+    arrows: { to: { enabled: true, scaleFactor: 0.35 } },
+    smooth: { type: 'curvedCW', roundness: 0.12 },
+    _data: e,
+  }));
+
+  vNodes.forEach(n => { origNode[n.id] = JSON.parse(JSON.stringify(n)); });
+  vEdges.forEach(e => { origEdge[e.id] = JSON.parse(JSON.stringify(e)); });
+
+  allNodes = new vis.DataSet(vNodes);
+  allEdges = new vis.DataSet(vEdges);
+
+  document.getElementById('loading-overlay').style.display = 'none';
+
+  network = new vis.Network(
+    document.getElementById('network'),
+    { nodes: allNodes, edges: allEdges },
+    {
+      physics: {
+        forceAtlas2Based: { gravitationalConstant: -65, centralGravity: 0.008, springLength: 130, springConstant: 0.06 },
+        solver: 'forceAtlas2Based',
+        stabilization: { iterations: 250, updateInterval: 20 },
+      },
+      interaction: { hover: true, zoomView: true, tooltipDelay: 100 },
+    }
+  );
+
+  setTimeout(() => {
+    document.getElementById('graph-hint').classList.add('visible');
+    setTimeout(() => document.getElementById('graph-hint').classList.remove('visible'), 4000);
+  }, 1500);
+
+  network.on('click', params => {
+    if (!params.nodes.length) { resetGraph(); return; }
+    selectNode(params.nodes[0]);
+  });
+}
+
+// ── Node selection ───────────────────────────────────────────────────────────
+async function selectNode(nodeId) {
+  currentNode = nodeId;
+  const nData = (allNodes.get(nodeId) || {})._data || {};
+
+  // Show node info panel
+  document.getElementById('placeholder').style.display = 'none';
+  document.getElementById('node-info').style.display = 'block';
+  document.getElementById('ni-label').textContent = nodeId;
+
+  const kindEl = document.getElementById('ni-kind');
+  kindEl.textContent = nData.kind || 'table';
+  kindEl.className = 'kind-badge kind-' + (nData.kind || 'table');
+
+  // Switch to impact tab
+  switchTab('impact');
+
+  // Fetch impact
+  const res = await fetch(`/api/impact/${encodeURIComponent(nodeId)}?direction=downstream`).then(r => r.json());
+  const impactIds = new Set(res.nodes.map(n => n.node_id));
+
+  document.getElementById('impact-count').textContent = res.nodes.length;
+  document.getElementById('impact-direction').textContent = 'downstream';
+
+  const list = document.getElementById('impact-list');
+  list.innerHTML = '';
+  res.nodes.slice(0, 20).forEach(n => {
+    const li = document.createElement('li');
+    li.className = 'impact-item';
+    li.innerHTML = `<span class="impact-item-name">${n.node_id}</span>
+                    <span class="hop-pill">${n.hops} hop${n.hops !== 1 ? 's' : ''}</span>`;
+    list.appendChild(li);
+  });
+  if (res.nodes.length > 20) {
+    const li = document.createElement('li');
+    li.className = 'impact-item';
+    li.style.color = 'var(--muted)';
+    li.innerHTML = `<span>…and ${res.nodes.length - 20} more</span>`;
+    list.appendChild(li);
+  }
+
+  // Highlight graph
+  highlightImpact(nodeId, impactIds);
+
+  // Pre-fetch AI in background (cache it)
+  prefetchAI(nodeId);
+}
+
+function prefetchAI(nodeId) {
+  if (aiCache[nodeId]) return;
+  aiCache[nodeId] = { state: 'loading' };
+  fetch(`/api/ai-summary/${encodeURIComponent(nodeId)}?direction=downstream`)
+    .then(r => r.json())
+    .then(data => {
+      aiCache[nodeId] = { state: data.error ? 'error' : 'done', data };
+      if (currentNode === nodeId && document.getElementById('tab-ai').style.display !== 'none') {
+        renderAI(nodeId);
+      }
+    })
+    .catch(err => {
+      aiCache[nodeId] = { state: 'error', data: { error: err.message } };
+    });
+}
+
+function renderAI(nodeId) {
+  const cached = aiCache[nodeId];
+  document.getElementById('ai-loading').style.display = 'none';
+
+  if (!cached || cached.state === 'loading') {
+    document.getElementById('ai-loading').style.display = 'flex';
+    return;
+  }
+
+  if (cached.state === 'error' || cached.data.error) {
+    const errEl = document.getElementById('ai-error');
+    errEl.style.display = 'block';
+    errEl.textContent = cached.data?.error || 'AI summary unavailable.';
+    return;
+  }
+
+  const d = cached.data;
+  document.getElementById('ai-result').style.display = 'block';
+
+  const sevEl = document.getElementById('ai-severity');
+  sevEl.textContent = d.severity.toUpperCase();
+  sevEl.className = 'severity-badge sev-' + d.severity;
+
+  document.getElementById('ai-summary').textContent = d.summary;
+
+  if (d.uncertainty) {
+    const u = document.getElementById('ai-uncertainty');
+    u.style.display = 'block';
+    u.textContent = d.uncertainty;
+  }
+
+  const checks = document.getElementById('ai-checks');
+  checks.innerHTML = '';
+  (d.recommended_checks || []).forEach(c => {
+    const li = document.createElement('li');
+    li.className = 'check-item';
+    li.innerHTML = `<div class="check-dot"></div><span>${c}</span>`;
+    checks.appendChild(li);
+  });
+}
+
+// ── Graph highlight ──────────────────────────────────────────────────────────
+function highlightImpact(nodeId, impactIds) {
+  allNodes.update(allNodes.getIds().map(id => {
+    if (id === nodeId)           return { id, color: { background: C.hit.bg, border: C.hit.border }, borderWidth: 3, shadow: { enabled: true, color: '#ff406066', size: 14, x: 0, y: 0 } };
+    if (impactIds.has(id))       return { id, color: { background: C.blast.bg, border: C.blast.border }, borderWidth: 2, shadow: { enabled: false }, opacity: 1 };
+    return { id, opacity: 0.12, shadow: { enabled: false } };
+  }));
+
+  allEdges.update(allEdges.getIds().map(id => {
+    const e = origEdge[id];
+    if (e.from === nodeId || impactIds.has(e.from)) return { id, color: { color: '#f5a623', opacity: 1 }, width: 2.5 };
+    return { id, color: { color: '#1e2d4a', opacity: 0.06 } };
+  }));
+}
+
+function resetGraph() {
+  currentNode = null;
+  allNodes.update(Object.values(origNode));
+  allEdges.update(Object.values(origEdge));
+  document.getElementById('placeholder').style.display = 'flex';
+  document.getElementById('node-info').style.display = 'none';
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.getElementById('tab-impact').style.display = name === 'impact' ? 'block' : 'none';
+  document.getElementById('tab-ai').style.display     = name === 'ai'     ? 'block' : 'none';
+
+  if (name === 'ai' && currentNode) {
+    // Reset AI panel state
+    document.getElementById('ai-loading').style.display = 'flex';
+    document.getElementById('ai-result').style.display  = 'none';
+    document.getElementById('ai-error').style.display   = 'none';
+    renderAI(currentNode);
+  }
+}
+
+boot().catch(console.error);
+</script>
+</body>
+</html>
