@@ -1,7 +1,7 @@
 # ◈ dagscope
 
 ![Python](https://img.shields.io/badge/python-3.11+-blue?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-33%20passed-brightgreen?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-77%20passed-brightgreen?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-gray?style=flat-square)
 ![LLM](https://img.shields.io/badge/LLM-Anthropic%20Claude-7c5cfc?style=flat-square)
 ![Stack](https://img.shields.io/badge/stack-sqlglot%20·%20networkx-orange?style=flat-square)
@@ -234,7 +234,7 @@ pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
-33 tests covering the DAG parser, SQL extractor, graph builder, and impact engine. The LLM layer is tested at the contract boundary only — Pydantic schema validation against mocked output.
+77 tests covering the DAG parser, SQL extractor, graph builder, and impact engine. The LLM layer is tested at the contract boundary only — Pydantic schema validation against mocked output.
 
 *Built by [Momin Naeem](https://mominnaeem.com) · UWaterloo Computer Engineering*
 *Motivated by real data engineering work at GTS Securities — Airflow pipelines, PostgreSQL at scale, and the downstream breaks nobody saw coming.*

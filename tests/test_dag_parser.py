@@ -1,3 +1,6 @@
+import tempfile
+from pathlib import Path
+
 from dagscope.dag_parser import parse_dag_folder
 
 
@@ -58,3 +61,64 @@ def test_bash_operator_ignored(task_nodes):
     # BashOperator export_to_s3 should not appear — not a known SQL/Python operator
     assert "export_to_s3" not in node_ids
     assert "build_risk_dashboard" in node_ids
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage
+# ---------------------------------------------------------------------------
+
+def test_total_task_count(task_nodes):
+    assert len(task_nodes) == 10
+
+
+def test_all_tasks_have_dag_id(task_nodes):
+    assert all(n.dag_id for n in task_nodes)
+
+
+def test_all_tasks_have_task_id(task_nodes):
+    assert all(n.task_id for n in task_nodes)
+
+
+def test_node_id_format(task_nodes):
+    for n in task_nodes:
+        assert n.node_id == f"{n.dag_id}.{n.task_id}"
+
+
+def test_node_ids_unique(task_nodes):
+    ids = [n.node_id for n in task_nodes]
+    assert len(ids) == len(set(ids))
+
+
+def test_positions_daily_has_two_tasks(task_nodes):
+    tasks = [n for n in task_nodes if n.dag_id == "positions_daily"]
+    task_ids = {n.task_id for n in tasks}
+    assert task_ids == {"clear_stale", "build_positions"}
+
+
+def test_source_task_has_no_upstream(task_nodes):
+    load_trades = next(
+        n for n in task_nodes
+        if n.dag_id == "raw_trades_ingest" and n.task_id == "load_trades"
+    )
+    assert load_trades.upstream_task_ids == []
+
+
+def test_sql_operator_class_is_string(task_nodes):
+    for n in task_nodes:
+        assert isinstance(n.operator_class, str)
+        assert len(n.operator_class) > 0
+
+
+def test_sql_file_is_relative_path(task_nodes):
+    load_trades = next(
+        n for n in task_nodes
+        if n.dag_id == "raw_trades_ingest" and n.task_id == "load_trades"
+    )
+    assert load_trades.sql_file is not None
+    assert not Path(load_trades.sql_file).is_absolute()
+
+
+def test_parse_empty_dir_returns_empty():
+    with tempfile.TemporaryDirectory() as tmp:
+        nodes = parse_dag_folder(Path(tmp))
+    assert nodes == []

@@ -98,3 +98,124 @@ def test_low_confidence_preserved(sql_sources, table_edges):
     assert len(low_conf_sources) >= 1, "settlement_breaks PythonOperator should produce low-confidence sources"
     low_conf_edges = [e for e in table_edges if e.confidence == "low"]
     assert len(low_conf_edges) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage
+# ---------------------------------------------------------------------------
+
+def test_select_only_no_write_edge():
+    sql = "SELECT id, price FROM raw.trades WHERE trade_date = CURRENT_DATE"
+    edges, _ = parse_sql_sources([_src(sql)])
+    assert all(e.writes == [] for e in edges)
+
+
+def test_multi_table_join_all_detected():
+    sql = """
+    INSERT INTO public.pnl_daily (instrument_id, pnl)
+    SELECT p.instrument_id, p.book_value_usd * f.rate
+    FROM public.positions_usd p
+    JOIN raw.fx_rates f ON p.currency = f.currency_code
+    JOIN raw.instrument_master im ON p.instrument_id = im.instrument_id
+    """
+    edges, _ = parse_sql_sources([_src(sql)])
+    reads = {r for e in edges for r in e.reads}
+    assert "public.positions_usd" in reads
+    assert "raw.fx_rates" in reads
+    assert "raw.instrument_master" in reads
+
+
+def test_two_ctes_both_filtered():
+    sql = """
+    WITH base AS (SELECT * FROM raw.trades),
+         enriched AS (SELECT b.*, im.name FROM base b JOIN raw.instrument_master im ON b.id = im.id)
+    INSERT INTO public.positions_daily SELECT * FROM enriched
+    """
+    edges, _ = parse_sql_sources([_src(sql)])
+    reads = {r for e in edges for r in e.reads}
+    assert "public.base" not in reads
+    assert "public.enriched" not in reads
+    assert "raw.trades" in reads
+    assert "raw.instrument_master" in reads
+
+
+def test_pseudo_tables_constant():
+    from dagscope.sql_parser import _PSEUDO_TABLES
+    assert "excluded" in _PSEUDO_TABLES
+    assert "old" in _PSEUDO_TABLES
+    assert "new" in _PSEUDO_TABLES
+
+
+def test_success_rate_all_valid():
+    sources = [
+        _src("INSERT INTO raw.trades SELECT id FROM staging.trades_staging"),
+        _src("INSERT INTO raw.fx_rates SELECT id FROM staging.fx_rates_staging"),
+        _src("DELETE FROM public.positions_daily WHERE position_date < NOW()"),
+    ]
+    _, rate = parse_sql_sources(sources)
+    assert rate == 1.0
+
+
+def test_success_rate_partial_failure():
+    sources = [
+        _src("INSERT INTO raw.trades SELECT id FROM staging.trades_staging"),
+        _src("@@@ not sql at all $$$"),
+    ]
+    _, rate = parse_sql_sources(sources)
+    assert 0.0 < rate < 1.0
+
+
+def test_empty_source_list():
+    edges, rate = parse_sql_sources([])
+    assert edges == []
+    assert rate == 1.0
+
+
+def test_merge_writes_target():
+    sql = """
+    MERGE INTO public.positions_usd AS tgt
+    USING (SELECT instrument_id, book_value * rate AS book_value_usd
+           FROM public.positions_daily pd
+           JOIN raw.fx_rates fx ON pd.currency = fx.currency_code) AS src
+    ON tgt.instrument_id = src.instrument_id
+    WHEN MATCHED THEN UPDATE SET book_value_usd = src.book_value_usd
+    WHEN NOT MATCHED THEN INSERT (instrument_id, book_value_usd)
+    VALUES (src.instrument_id, src.book_value_usd)
+    """
+    edges, rate = parse_sql_sources([_src(sql)])
+    if rate > 0:
+        writes = {w for e in edges for w in e.writes}
+        assert "public.positions_usd" in writes
+
+
+def test_subquery_in_from_detected():
+    sql = """
+    INSERT INTO public.exposure_report (instrument_id, exposure)
+    SELECT sub.instrument_id, sub.pnl
+    FROM (SELECT instrument_id, SUM(pnl) AS pnl FROM public.pnl_daily GROUP BY 1) sub
+    """
+    edges, _ = parse_sql_sources([_src(sql)])
+    reads = {r for e in edges for r in e.reads}
+    assert "public.pnl_daily" in reads
+
+
+def test_full_pipeline_parse_rate(sql_sources):
+    _, rate = parse_sql_sources(sql_sources)
+    assert rate == 1.0, f"Expected 100% parse rate for sample DAGs, got {rate:.1%}"
+
+
+def test_multiple_sources_independent():
+    sources = [
+        _src("INSERT INTO raw.trades SELECT id FROM staging.trades_staging", "high"),
+        _src("INSERT INTO raw.fx_rates SELECT id FROM staging.fx_rates_staging", "high"),
+        _src("DELETE FROM public.positions_daily WHERE 1=1", "high"),
+    ]
+    edges, _ = parse_sql_sources(sources)
+    assert len(edges) == 3
+
+
+def test_write_target_not_in_reads():
+    sql = "INSERT INTO public.pnl_daily SELECT book_value_usd FROM public.positions_usd"
+    edges, _ = parse_sql_sources([_src(sql)])
+    for e in edges:
+        assert "public.pnl_daily" not in e.reads

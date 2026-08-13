@@ -69,3 +69,78 @@ def test_graph_summary(graph):
     assert s["table_count"] >= 8
     assert s["dag_count"] >= 9
     assert s["low_confidence_edge_count"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage
+# ---------------------------------------------------------------------------
+
+def test_result_is_impact_result_type(graph):
+    result = impact_engine.downstream(graph, "public.positions_daily")
+    assert isinstance(result, impact_engine.ImpactResult)
+
+
+def test_downstream_direction_label(graph):
+    result = impact_engine.downstream(graph, "public.positions_daily")
+    assert result.direction == "downstream"
+
+
+def test_upstream_direction_label(graph):
+    result = impact_engine.upstream(graph, "public.pnl_daily")
+    assert result.direction == "upstream"
+
+
+def test_selected_node_not_in_results(graph):
+    node = "public.positions_daily"
+    result = impact_engine.downstream(graph, node)
+    assert all(n.node_id != node for n in result.nodes)
+
+
+def test_all_hops_are_positive_integers(graph):
+    result = impact_engine.downstream(graph, "raw.trades")
+    for n in result.nodes:
+        assert isinstance(n.hops, int)
+        assert n.hops >= 1
+
+
+def test_staging_table_has_empty_upstream(graph):
+    # staging.trades_staging has no writers — it's an external source
+    result = impact_engine.upstream(graph, "staging.trades_staging")
+    assert result.nodes == []
+
+
+def test_leaf_table_has_empty_downstream(graph):
+    # public.risk_dashboard_ext is never read by any task in the sample set
+    result = impact_engine.downstream(graph, "public.risk_dashboard_ext")
+    assert result.nodes == []
+
+
+def test_settlement_breaks_downstream_of_positions_daily(graph):
+    result = impact_engine.downstream(graph, "public.positions_daily")
+    node_ids = {n.node_id for n in result.nodes}
+    assert "public.settlement_breaks" in node_ids
+
+
+def test_risk_dashboard_upstream_includes_pnl(graph):
+    result = impact_engine.upstream(graph, "public.risk_dashboard_ext")
+    node_ids = {n.node_id for n in result.nodes}
+    assert "public.pnl_daily" in node_ids
+
+
+def test_summary_exact_edge_count(graph):
+    s = impact_engine.graph_summary(graph)
+    assert s["edge_count"] == 26
+
+
+def test_cycles_are_lists_of_lists(graph):
+    cycles = impact_engine.find_cycles(graph)
+    assert isinstance(cycles, list)
+    for cycle in cycles:
+        assert isinstance(cycle, list)
+        assert len(cycle) >= 2
+
+
+def test_nodes_sorted_ascending_by_hops(graph):
+    result = impact_engine.downstream(graph, "raw.trades")
+    hops = [n.hops for n in result.nodes]
+    assert hops == sorted(hops)
