@@ -170,16 +170,55 @@ def export_graph(output, dag_dir):
 @click.option("--dag-dir", default="sample_dags", show_default=True)
 @click.option("--port", default=8000, show_default=True, type=int)
 @click.option("--host", default="127.0.0.1", show_default=True)
-def serve(dag_dir, port, host):
-    """Launch the web UI (force-directed lineage graph in browser)."""
-    import os
-    os.environ["DAGSCOPE_DAG_DIR"] = str(Path(dag_dir).resolve())
-    console.print(f"[bold]dagscope[/bold] web UI → http://{host}:{port}")
+@click.option("--next/--no-next", "use_next", default=True,
+              help="Also start the Next.js frontend on port 3000 (requires npm install in web/frontend)")
+def serve(dag_dir, port, host, use_next):
+    """Launch the web UI.
+
+    By default starts both the FastAPI backend (port 8000) and the Next.js
+    frontend (port 3000). Open http://localhost:3000 in your browser.
+    Use --no-next to start only the FastAPI backend.
+    """
+    import subprocess
+    import threading
+
     try:
         import uvicorn
-        uvicorn.run("dagscope.web.server:app", host=host, port=port, reload=False)
     except ImportError:
         console.print("[red]uvicorn not installed. Run: pip install uvicorn[/red]")
+        return
+
+    os.environ["DAGSCOPE_DAG_DIR"] = str(Path(dag_dir).resolve())
+
+    frontend_dir = Path(__file__).parent / "web" / "frontend"
+    has_next = (frontend_dir / "package.json").exists() and (frontend_dir / "node_modules").exists()
+
+    if use_next and has_next:
+        # Run FastAPI in a daemon thread so Next.js can be the foreground process
+        def _run_api():
+            uvicorn.run("dagscope.web.server:app", host=host, port=port, reload=False, log_level="warning")
+
+        api_thread = threading.Thread(target=_run_api, daemon=True)
+        api_thread.start()
+
+        console.print(f"[bold]dagscope[/bold] API     → http://{host}:{port}")
+        console.print(f"[bold]dagscope[/bold] web UI  → [green]http://localhost:3000[/green]")
+        console.print("[dim]Ctrl-C to stop both servers[/dim]")
+
+        try:
+            subprocess.run(["npm", "run", "dev"], cwd=str(frontend_dir), check=True)
+        except KeyboardInterrupt:
+            pass
+    else:
+        if use_next and not has_next:
+            console.print(
+                "[yellow]Next.js frontend not installed — run:[/yellow]\n"
+                f"  cd {frontend_dir}\n"
+                "  npm install\n"
+                "[yellow]Falling back to legacy HTML UI.[/yellow]\n"
+            )
+        console.print(f"[bold]dagscope[/bold] web UI → http://{host}:{port}")
+        uvicorn.run("dagscope.web.server:app", host=host, port=port, reload=False)
 
 
 # ---------------------------------------------------------------------------

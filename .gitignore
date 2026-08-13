@@ -23,6 +23,11 @@ htmlcov/
 # exports
 graph.json
 
+# Next.js
+dagscope/web/frontend/.next/
+dagscope/web/frontend/node_modules/
+dagscope/web/frontend/next-env.d.ts
+
 # project internals (not for the repo)
 CLAUDE.md
 readme-preview.html

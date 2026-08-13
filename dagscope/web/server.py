@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -29,6 +30,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="dagscope", lifespan=lifespan)
+
+# Allow the Next.js dev server (port 3000) to call the API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 
 

@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --canvas:  #070d1a;
+  --surface: #10161f;
+  --border:  #21262d;
+  --muted:   #4a5a7a;
+  --text:    #e8edf7;
+  --green:   #22d3a0;
+  --amber:   #f5a623;
+  --red:     #ff4060;
+  --purple:  #bc8cff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+/* vis-network canvas needs explicit height */
+.graph-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* Thin scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}

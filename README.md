@@ -146,13 +146,22 @@ dagscope check  --cycles
 dagscope impact --table public.positions_daily --no-llm
 dagscope impact --table raw.instrument_master  --no-llm
 
-# Web UI — interactive force-directed graph
-dagscope serve
-# open http://localhost:8000, click any node to inspect
-
 # AI summaries
 export ANTHROPIC_API_KEY=sk-ant-...
 dagscope impact --table public.positions_daily
+```
+
+**Next.js web UI** (React + TypeScript frontend):
+
+```bash
+cd dagscope/web/frontend
+npm install
+
+# In one terminal — start FastAPI backend + Next.js together:
+dagscope serve          # API on :8000, UI on http://localhost:3000
+
+# SSR shareable blast-radius page (server-rendered):
+open http://localhost:3000/impact/public.positions_daily
 ```
 
 ## CLI Reference
@@ -203,8 +212,10 @@ Nine DAGs in a trading-and-positions domain, bundled in `sample_dags/`. Each is 
 | Validation | `pydantic v2` | Schema enforcement on LLM output — rejects malformed responses |
 | LLM | Anthropic Claude Haiku | Fast, structured JSON output; degrades gracefully without key |
 | CLI | `click` + `rich` | Exit code 1 on high severity enables CI gating |
-| Web API | `FastAPI` | Async endpoints for 2–3s LLM calls |
-| Visualization | `vis-network` | Force-directed layout, zero build step |
+| Web API | `FastAPI` | Async endpoints for 2–3s LLM calls; CORS for Next.js dev proxy |
+| Frontend | `Next.js 15` + `TypeScript` | App Router; SSR shareable `/impact/[node]` pages; typed API client |
+| Visualization | `vis-network` (React wrapper) | Force-directed layout; imperative lib integrated via `useRef`/`useEffect` |
+| Styling | `Tailwind CSS` | Dark-theme design tokens consistent across components |
 | Tests | `pytest` | 33 tests — parser, graph, impact engine, LLM contract |
 
 ## Known Limitations
