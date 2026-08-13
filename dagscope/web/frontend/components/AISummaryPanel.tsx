@@ -33,8 +33,16 @@ export default function AISummaryPanel({ nodeId, direction }: Props) {
     setSummary(null);
 
     api.aiSummary(nodeId, direction)
-      .then((s) => { setSummary(s); setCacheKey(key); })
-      .catch((e: Error) => setError(e.message.includes('ANTHROPIC') ? 'Set ANTHROPIC_API_KEY to enable AI summaries.' : e.message))
+      .then((s) => {
+        // FastAPI returns {error: string} when API key is missing or summarize() returns None
+        if ('error' in s) {
+          setError((s as unknown as { error: string }).error);
+        } else {
+          setSummary(s);
+          setCacheKey(key);
+        }
+      })
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [nodeId, direction, cacheKey]);
 
@@ -69,11 +77,11 @@ export default function AISummaryPanel({ nodeId, direction }: Props) {
       <p className="text-text/80 leading-relaxed">{summary.summary}</p>
 
       {/* Recommended checks */}
-      {summary.recommended_checks.length > 0 && (
+      {(summary.recommended_checks?.length ?? 0) > 0 && (
         <div>
           <div className="text-muted mb-1.5 font-medium">Recommended checks</div>
           <ul className="flex flex-col gap-1">
-            {summary.recommended_checks.map((check, i) => (
+            {(summary.recommended_checks ?? []).map((check, i) => (
               <li key={i} className="flex gap-2 text-text/70">
                 <span className="text-green shrink-0">•</span>
                 {check}

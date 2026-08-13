@@ -22,24 +22,33 @@ const NODE_COLORS: Record<string, { bg: string; border: string }> = {
 const VIS_OPTIONS: Options = {
   nodes: {
     shape: 'ellipse',
-    font: { size: 12, face: 'ui-monospace, monospace', color: '#e8edf7' },
+    font: { size: 11, face: 'ui-monospace, monospace', color: '#e8edf7' },
     borderWidth: 1.5,
     borderWidthSelected: 2.5,
     shadow: false,
+    widthConstraint: { maximum: 150 },
   },
   edges: {
-    arrows: { to: { enabled: true, scaleFactor: 0.6 } },
+    arrows: { to: { enabled: true, scaleFactor: 0.5 } },
     color: { color: '#2a3d5a', highlight: '#f5a623', hover: '#3a4d6a' },
     width: 1.2,
-    smooth: { enabled: true, type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 },
+    smooth: { enabled: true, type: 'cubicBezier', roundness: 0.5 },
   },
-  physics: {
-    solver: 'forceAtlas2Based',
-    forceAtlas2Based: { gravitationalConstant: -40, springLength: 120, springConstant: 0.04 },
-    stabilization: { iterations: 200 },
+  physics: { enabled: false },
+  layout: {
+    hierarchical: {
+      enabled: true,
+      direction: 'LR',
+      sortMethod: 'directed',
+      levelSeparation: 140,
+      nodeSpacing: 60,
+      treeSpacing: 80,
+      blockShifting: true,
+      edgeMinimization: true,
+      parentCentralization: true,
+    },
   },
-  interaction: { hover: true, tooltipDelay: 100 },
-  layout: { improvedLayout: false },
+  interaction: { hover: true, tooltipDelay: 150, zoomView: true, dragView: true },
 };
 
 export default function GraphCanvas({ data, selectedNode, blastRadius, onNodeSelect }: Props) {
@@ -60,15 +69,16 @@ export default function GraphCanvas({ data, selectedNode, blastRadius, onNodeSel
       const nodes = new DataSet(
         data.nodes.map((n) => ({
           id: n.id,
-          label: n.id,
+          // Short label for the node — full ID shown in tooltip on hover
+          label: n.id.split('.').pop() ?? n.id,
           color: {
             background: (NODE_COLORS[n.kind] ?? NODE_COLORS.table).bg,
             border:     (NODE_COLORS[n.kind] ?? NODE_COLORS.table).border,
           },
           font: { color: '#e8edf7' },
           title: [
+            n.id,
             n.kind,
-            n.dag_id,
             n.confidence === 'low' ? '⚠ low confidence' : null,
           ].filter(Boolean).join('\n'),
         }))
@@ -90,6 +100,15 @@ export default function GraphCanvas({ data, selectedNode, blastRadius, onNodeSel
       const network = new (Network as any)(containerRef.current!, { nodes, edges }, VIS_OPTIONS) as VisNetwork;
 
       networkRef.current = network;
+
+      // Hierarchical layout positions nodes synchronously but the viewport needs
+      // a tick to reflect the final positions before fit() works correctly.
+      setTimeout(() => {
+        network.fit({ animation: false });
+        const scale = network.getScale();
+        // If the graph is tiny (many levels), zoom in to a readable minimum
+        if (scale < 0.7) network.moveTo({ scale: 0.7 });
+      }, 150);
 
       network.on('click', (params) => {
         if (params.nodes.length > 0) onNodeSelect(String(params.nodes[0]));

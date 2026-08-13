@@ -2,6 +2,15 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+# Load .env from CWD so ANTHROPIC_API_KEY is available when running via uvicorn directly
+_env = Path(".env")
+if _env.exists():
+    for _line in _env.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip())
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
